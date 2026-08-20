@@ -1,0 +1,162 @@
+-- CREATE DATABASE url_shortener;
+-- SHOW DATABASES;
+-- USE url_shortener;
+-- show tables;
+-- DESCRIBE urls;
+-- SELECT * FROM urls;
+
+-- SELECT short_code, COUNT(*)
+-- FROM urls
+-- GROUP BY short_code
+-- HAVING COUNT(*) > 1;
+
+-- ALTER TABLE urls
+-- ADD CONSTRAINT uq_urls_short_code UNIQUE (short_code);
+
+-- SHOW TABLES;
+-- DESCRIBE users;
+
+-- SELECT id, name, email, password_hash
+-- FROM users;
+
+-- SELECT * FROM urls;
+
+-- ALTER TABLE urls
+-- ADD COLUMN user_id INT NOT NULL;
+
+-- ALTER TABLE urls
+-- ADD CONSTRAINT fk_urls_user
+-- FOREIGN KEY (user_id)
+-- REFERENCES users(id);
+
+-- SELECT COUNT(*) FROM urls;
+
+-- SELECT id, original_url, short_code, user_id
+-- FROM urls;
+
+-- SELECT id, name, email
+-- FROM users;
+
+-- ALTER TABLE urls
+-- ADD COLUMN user_id INT NULL;
+
+-- UPDATE urls
+-- SET user_id = 1
+-- WHERE user_id IS NULL;
+
+-- ALTER TABLE urls
+-- ADD CONSTRAINT fk_urls_user
+-- FOREIGN KEY (user_id)
+-- REFERENCES users(id);
+
+-- SELECT id, original_url, short_code, user_id
+-- FROM urls
+-- WHERE user_id IS NULL
+--    OR user_id NOT IN (SELECT id FROM users);
+
+-- SELECT id, name, email
+-- FROM users;
+
+-- UPDATE urls
+-- SET user_id = 1
+-- WHERE user_id IS NULL
+--    OR user_id NOT IN (SELECT id FROM users);
+--    
+-- SELECT id, original_url, short_code, user_id
+-- FROM urls;
+
+-- UPDATE urls
+-- SET user_id = 1
+-- WHERE user_id = 0;
+
+-- SET SQL_SAFE_UPDATES = 0;
+
+-- UPDATE urls
+-- SET user_id = 1
+-- WHERE user_id = 0;
+
+-- SET SQL_SAFE_UPDATES = 1;
+
+-- SELECT id, original_url, short_code, user_id
+-- FROM urls;
+
+-- SHOW DATABASES;
+-- show tables;
+
+-- SHOW DATABASES;
+-- USE url_shortner;
+-- SELECT * FROM users;
+-- SELECT * FROM urls;
+
+-- SELECT DATABASE();
+
+SHOW DATABASES;
+USE url_shortener;
+SELECT DATABASE();
+SHOW TABLES;
+SELECT * FROM users;
+SELECT id, original_url, short_code, user_id
+FROM urls;
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE urls
+SET user_id = 1
+WHERE user_id = 0;
+
+SET SQL_SAFE_UPDATES = 1;
+
+SELECT id, original_url, short_code, user_id
+FROM urls;
+
+SELECT id, original_url, short_code, user_id
+FROM urls;
+
+SELECT user_id, COUNT(*) AS total
+FROM urls
+GROUP BY user_id;
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE urls
+SET user_id = 1
+WHERE user_id = 0;
+
+SET SQL_SAFE_UPDATES = 1;
+
+UPDATE urls
+SET user_id = 1
+WHERE user_id = 0
+  AND id > 0;
+  
+SELECT user_id, COUNT(*) AS total
+FROM urls
+GROUP BY user_id;
+
+SELECT DATABASE();
+
+SELECT user_id, COUNT(*) AS total
+FROM urls
+GROUP BY user_id;
+
+
+SELECT id, original_url, short_code, user_id
+FROM urls;
+
+SELECT id, name, email
+FROM users;
+
+SELECT id, name, email
+FROM users;
+
+ALTER TABLE users
+CHANGE COLUMN name username VARCHAR(100) NOT NULL;
+
+SELECT id, username, email
+FROM users;
+
+ALTER TABLE users
+ADD CONSTRAINT uq_users_username UNIQUE (username);
+
+SELECT id, username, email, password_hash
+FROM users;

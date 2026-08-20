@@ -1,0 +1,24 @@
+# Environment variables
+.env
+
+# Virtual environment
+fastapi/
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Pytest
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
