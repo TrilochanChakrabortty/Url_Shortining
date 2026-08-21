@@ -1,4 +1,6 @@
 import hashlib
+import time
+
 from datetime import timedelta
 
 from fastapi import (
@@ -109,7 +111,6 @@ app.add_middleware(
 
 # ============================================================
 # SESSION MIDDLEWARE
-# Required for Google OAuth state handling
 # ============================================================
 
 app.add_middleware(
@@ -146,6 +147,7 @@ oauth.register(
 
 @app.get("/")
 def home():
+
     return {
         "message": "URL Shortener API is running"
     }
@@ -161,7 +163,6 @@ def register_user(
     db: Session = Depends(get_db),
 ):
 
-    # Check existing username
     existing_username = (
         db.query(models.User)
         .filter(
@@ -171,12 +172,12 @@ def register_user(
     )
 
     if existing_username:
+
         raise HTTPException(
             status_code=400,
             detail="Username already exists",
         )
 
-    # Check existing email
     existing_email = (
         db.query(models.User)
         .filter(
@@ -186,12 +187,12 @@ def register_user(
     )
 
     if existing_email:
+
         raise HTTPException(
             status_code=400,
             detail="Email already registered",
         )
 
-    # Create new user
     new_user = models.User(
         username=user_data.username,
         email=user_data.email,
@@ -216,7 +217,6 @@ def register_user(
 
 # ============================================================
 # LOGIN USER
-# Username + Password
 # ============================================================
 
 @app.post("/auth/login")
@@ -225,7 +225,6 @@ def login_user(
     db: Session = Depends(get_db),
 ):
 
-    # Find user using username
     user = (
         db.query(models.User)
         .filter(
@@ -234,24 +233,23 @@ def login_user(
         .first()
     )
 
-    # Check username
     if not user:
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
 
-    # Check password
     if not verify_password(
         user_data.password,
         user.password_hash,
     ):
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
 
-    # Create JWT token
     access_token = create_access_token(
         data={
             "sub": str(user.id)
@@ -307,12 +305,10 @@ async def google_callback(
 
     try:
 
-        # Get Google access token
         token = await oauth.google.authorize_access_token(
             request
         )
 
-        # Get user information
         user_info = token.get("userinfo")
 
         if not user_info:
@@ -322,18 +318,13 @@ async def google_callback(
             )
 
         email = user_info.get("email")
-        name = user_info.get("name")
-        google_sub = user_info.get("sub")
 
         if not email:
+
             raise HTTPException(
                 status_code=400,
                 detail="Google account email not found",
             )
-
-        # ----------------------------------------------------
-        # Check if user already exists
-        # ----------------------------------------------------
 
         user = (
             db.query(models.User)
@@ -343,22 +334,14 @@ async def google_callback(
             .first()
         )
 
-        # ----------------------------------------------------
-        # Create user if not found
-        # ----------------------------------------------------
-
         if not user:
 
-            # Generate a base username
-            base_username = (
-                email.split("@")[0]
-            )
+            base_username = email.split("@")[0]
 
             username = base_username
 
             counter = 1
 
-            # Ensure username is unique
             while (
                 db.query(models.User)
                 .filter(
@@ -373,7 +356,6 @@ async def google_callback(
 
                 counter += 1
 
-            # Google OAuth users don't use password login
             user = models.User(
                 username=username,
                 email=email,
@@ -384,10 +366,6 @@ async def google_callback(
             db.commit()
             db.refresh(user)
 
-        # ----------------------------------------------------
-        # Create JWT Token
-        # ----------------------------------------------------
-
         access_token = create_access_token(
             data={
                 "sub": str(user.id)
@@ -396,10 +374,6 @@ async def google_callback(
                 minutes=ACCESS_TOKEN_EXPIRE_MINUTES
             ),
         )
-
-        # ----------------------------------------------------
-        # Redirect to React frontend
-        # ----------------------------------------------------
 
         frontend_url = (
             "http://localhost:5173/"
@@ -448,13 +422,7 @@ def get_me(
 
 # ============================================================
 # SHORTEN URL
-# Supports:
-#
-# Guest user     → 5 URLs per IP
-# Registered user → unlimited based on current logic
-#
-# General rate limit:
-# 60 requests/minute/IP
+# PERFORMANCE PROFILE ENABLED
 # ============================================================
 
 @app.post(
@@ -470,6 +438,12 @@ def shorten_url(
     ),
 ):
 
+    # ========================================================
+    # TOTAL TIMER
+    # ========================================================
+
+    start_total = time.perf_counter()
+
     # --------------------------------------------------------
     # GET CLIENT IP
     # --------------------------------------------------------
@@ -480,14 +454,15 @@ def shorten_url(
         else "unknown"
     )
 
-    # --------------------------------------------------------
-    # GENERAL RATE LIMIT
-    # 60 requests/minute/IP
-    # --------------------------------------------------------
+    # ========================================================
+    # RATE LIMIT TIMER
+    # ========================================================
+
+    start_rate_limit = time.perf_counter()
 
     allowed, current_count = check_rate_limit(
         identifier=f"ip:{client_ip}",
-        limit=60,
+        limit=100000,
         window_seconds=60,
     )
 
@@ -500,11 +475,6 @@ def shorten_url(
                 "Please try again later."
             ),
         )
-
-    # --------------------------------------------------------
-    # GUEST USER LIMIT
-    # 5 URL shorten attempts
-    # --------------------------------------------------------
 
     if current_user is None:
 
@@ -524,29 +494,37 @@ def shorten_url(
                 ),
             )
 
-    # --------------------------------------------------------
-    # CONVERT URL TO STRING
-    # --------------------------------------------------------
+    end_rate_limit = time.perf_counter()
+
+    # ========================================================
+    # CONVERT URL
+    # ========================================================
 
     original_url = str(
         url_data.url
     )
 
-    # --------------------------------------------------------
-    # CREATE SHA-256 HASH
-    # --------------------------------------------------------
+    # ========================================================
+    # SHA-256 HASH TIMER
+    # ========================================================
+
+    start_hash = time.perf_counter()
 
     original_url_hash = hashlib.sha256(
         original_url.encode("utf-8")
     ).hexdigest()
 
-    # --------------------------------------------------------
-    # CHECK EXISTING URL
-    #
-    # Only for registered users.
-    # --------------------------------------------------------
+    end_hash = time.perf_counter()
+
+    # ========================================================
+    # DUPLICATE URL QUERY TIMER
+    # ========================================================
+
+    duplicate_query_time = 0
 
     if current_user:
+
+        start_duplicate_query = time.perf_counter()
 
         existing_url = (
             db.query(models.URL)
@@ -560,28 +538,68 @@ def shorten_url(
             .first()
         )
 
+        end_duplicate_query = time.perf_counter()
+
+        duplicate_query_time = (
+            end_duplicate_query
+            - start_duplicate_query
+        )
+
+        # ----------------------------------------------------
+        # EXISTING URL FOUND
+        # ----------------------------------------------------
+
         if existing_url:
+
+            total_time = (
+                time.perf_counter()
+                - start_total
+            )
+
+            print(
+                "\n========== SHORTEN PERFORMANCE =========="
+            )
+
+            print(
+                f"Rate limit       : "
+                f"{(end_rate_limit - start_rate_limit) * 1000:.2f} ms"
+            )
+
+            print(
+                f"SHA-256 hash     : "
+                f"{(end_hash - start_hash) * 1000:.4f} ms"
+            )
+
+            print(
+                f"Duplicate query  : "
+                f"{duplicate_query_time * 1000:.2f} ms"
+            )
+
+            print(
+                f"Total request    : "
+                f"{total_time * 1000:.2f} ms"
+            )
+
+            print(
+                "=========================================\n"
+            )
 
             return {
                 "id": existing_url.id,
-                "original_url": (
-                    existing_url.original_url
-                ),
-                "short_code": (
-                    existing_url.short_code
-                ),
+                "original_url": existing_url.original_url,
+                "short_code": existing_url.short_code,
                 "short_url": (
                     f"http://localhost:8000/"
                     f"{existing_url.short_code}"
                 ),
-                "click_count": (
-                    existing_url.click_count
-                ),
+                "click_count": existing_url.click_count,
             }
 
-    # --------------------------------------------------------
-    # GENERATE UNIQUE SHORT CODE
-    # --------------------------------------------------------
+    # ========================================================
+    # SHORT CODE GENERATION + DB CHECK TIMER
+    # ========================================================
+
+    start_short_code = time.perf_counter()
 
     while True:
 
@@ -599,17 +617,17 @@ def shorten_url(
         if not existing_code:
             break
 
-    # --------------------------------------------------------
+    end_short_code = time.perf_counter()
+
+    # ========================================================
     # CREATE URL RECORD
-    # --------------------------------------------------------
+    # ========================================================
 
     new_url = models.URL(
         original_url=original_url,
         original_url_hash=original_url_hash,
         short_code=short_code,
 
-        # Registered user ID
-        # Guest user → None
         user_id=(
             current_user.id
             if current_user
@@ -617,15 +635,41 @@ def shorten_url(
         ),
     )
 
-    # --------------------------------------------------------
-    # SAVE TO DATABASE
-    # --------------------------------------------------------
+    # ========================================================
+    # DATABASE SAVE BREAKDOWN
+    # ========================================================
 
     try:
 
+        # ----------------------------------------------------
+        # db.add()
+        # ----------------------------------------------------
+
+        start_db_add = time.perf_counter()
+
         db.add(new_url)
+
+        end_db_add = time.perf_counter()
+
+        # ----------------------------------------------------
+        # db.commit()
+        # ----------------------------------------------------
+
+        start_db_commit = time.perf_counter()
+
         db.commit()
+
+        end_db_commit = time.perf_counter()
+
+        # ----------------------------------------------------
+        # db.refresh()
+        # ----------------------------------------------------
+
+        start_db_refresh = time.perf_counter()
+
         db.refresh(new_url)
+
+        end_db_refresh = time.perf_counter()
 
     except Exception as e:
 
@@ -641,9 +685,72 @@ def shorten_url(
             detail="Failed to create shortened URL",
         )
 
-    # --------------------------------------------------------
+    # ========================================================
+    # TOTAL TIME
+    # ========================================================
+
+    total_time = (
+        time.perf_counter()
+        - start_total
+    )
+
+    # ========================================================
+    # PERFORMANCE OUTPUT
+    # ========================================================
+
+    print(
+        "\n========== SHORTEN PERFORMANCE =========="
+    )
+
+    print(
+        f"Rate limit       : "
+        f"{(end_rate_limit - start_rate_limit) * 1000:.2f} ms"
+    )
+
+    print(
+        f"SHA-256 hash     : "
+        f"{(end_hash - start_hash) * 1000:.4f} ms"
+    )
+
+    if current_user:
+
+        print(
+            f"Duplicate query  : "
+            f"{duplicate_query_time * 1000:.2f} ms"
+        )
+
+    print(
+        f"Short code + DB  : "
+        f"{(end_short_code - start_short_code) * 1000:.2f} ms"
+    )
+
+    print(
+        f"db.add()         : "
+        f"{(end_db_add - start_db_add) * 1000:.4f} ms"
+    )
+
+    print(
+        f"db.commit()      : "
+        f"{(end_db_commit - start_db_commit) * 1000:.2f} ms"
+    )
+
+    print(
+        f"db.refresh()     : "
+        f"{(end_db_refresh - start_db_refresh) * 1000:.2f} ms"
+    )
+
+    print(
+        f"Total shorten    : "
+        f"{total_time * 1000:.2f} ms"
+    )
+
+    print(
+        "=========================================\n"
+    )
+
+    # ========================================================
     # RETURN RESPONSE
-    # --------------------------------------------------------
+    # ========================================================
 
     return {
         "id": new_url.id,
@@ -683,28 +790,28 @@ def redirect_to_original_url(
             detail="Short URL not found",
         )
 
-    # Increase click count
     url.click_count += 1
 
     db.commit()
 
-    # Redirect user
     return RedirectResponse(
         url=url.original_url,
         status_code=307,
     )
-    
+
+
 # ============================================================
 # USER DASHBOARD STATS
 # ============================================================
 
 @app.get("/dashboard/stats")
 def get_dashboard(
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
 
-    # Get all URLs created by the logged-in user
     urls = (
         db.query(models.URL)
         .filter(
@@ -713,16 +820,27 @@ def get_dashboard(
         .all()
     )
 
-    # Total URLs
     total_urls = len(urls)
 
-    # Total clicks across all URLs
     total_clicks = sum(
-        url.click_count for url in urls
+        url.click_count
+        for url in urls
     )
 
     return {
         "total_urls": total_urls,
         "total_clicks": total_clicks,
         "account_status": "Active",
+    }
+    
+@app.get("/debug/headers")
+def debug_headers(
+    request: Request
+):
+
+    return {
+        "authorization": request.headers.get(
+            "authorization"
+        ),
+        "all_headers": dict(request.headers),
     }

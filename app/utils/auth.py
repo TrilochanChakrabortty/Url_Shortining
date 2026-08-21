@@ -107,11 +107,27 @@ def get_optional_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ):
-    # No token = guest user
+
+    print("\n========== OPTIONAL AUTH DEBUG ==========")
+
+    # --------------------------------------------------------
+    # NO TOKEN
+    # --------------------------------------------------------
+
     if credentials is None:
+
+        print("NO CREDENTIALS RECEIVED")
+        print("========================================\n")
+
         return None
 
+    # --------------------------------------------------------
+    # TOKEN RECEIVED
+    # --------------------------------------------------------
+
     token = credentials.credentials
+
+    print("TOKEN RECEIVED:", token[:30], "...")
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -121,30 +137,79 @@ def get_optional_current_user(
         },
     )
 
+    # --------------------------------------------------------
+    # DECODE JWT
+    # --------------------------------------------------------
+
     try:
+
         payload = jwt.decode(
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM]
         )
 
+        print("JWT DECODE SUCCESS")
+
+        print("JWT PAYLOAD:", payload)
+
         user_id = payload.get("sub")
 
+        print("USER ID FROM TOKEN:", user_id)
+
         if user_id is None:
+
+            print("USER ID IS MISSING")
+
             raise credentials_exception
 
-    except JWTError:
+    except JWTError as e:
+
+        print("JWT ERROR:", repr(e))
+
         raise credentials_exception
 
-    user = (
-        db.query(models.User)
-        .filter(
-            models.User.id == int(user_id)
+    # --------------------------------------------------------
+    # DATABASE LOOKUP
+    # --------------------------------------------------------
+
+    try:
+
+        user_id = int(user_id)
+
+        print("SEARCHING USER ID:", user_id)
+
+        user = (
+            db.query(models.User)
+            .filter(
+                models.User.id == user_id
+            )
+            .first()
         )
-        .first()
-    )
+
+        print("DATABASE USER RESULT:", user)
+
+    except Exception as e:
+
+        print("DATABASE ERROR:", repr(e))
+
+        raise credentials_exception
+
+    # --------------------------------------------------------
+    # USER NOT FOUND
+    # --------------------------------------------------------
 
     if user is None:
+
+        print("USER NOT FOUND")
+
         raise credentials_exception
+
+    print(
+        "AUTH SUCCESS:",
+        user.username
+    )
+
+    print("========================================\n")
 
     return user
