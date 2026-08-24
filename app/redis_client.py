@@ -1,8 +1,19 @@
+import os
 import redis
 
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_DB = 0
+
+# ============================================================
+# REDIS CONFIGURATION
+# ============================================================
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+
+
+# ============================================================
+# REDIS CLIENT
+# ============================================================
 
 redis_client = redis.Redis(
     host=REDIS_HOST,
@@ -11,6 +22,10 @@ redis_client = redis.Redis(
     decode_responses=True,
 )
 
+
+# ============================================================
+# GET REDIS CONNECTION
+# ============================================================
 
 def get_redis():
     return redis_client

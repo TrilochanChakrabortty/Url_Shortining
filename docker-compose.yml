@@ -1,0 +1,84 @@
+# services:
+
+#   mysql:
+#     image: mysql:8.0
+#     container_name: url-shortener-mysql
+
+#     environment:
+#       MYSQL_ROOT_PASSWORD: trilochan
+#       MYSQL_DATABASE: url_shortener
+
+#     ports:
+#       - "3307:3306"
+
+#     volumes:
+#       - mysql_data:/var/lib/mysql
+
+#     healthcheck:
+#       test:
+#         [
+#           "CMD",
+#           "mysqladmin",
+#           "ping",
+#           "-h",
+#           "localhost",
+#           "-pusername"
+#         ]
+
+#       interval: 10s
+#       timeout: 5s
+#       retries: 10
+#       start_period: 20s
+
+
+#   api:
+#     build: .
+#     container_name: url-shortener-api
+
+#     ports:
+#       - "8000:8000"
+
+#     environment:
+#       DATABASE_URL: mysql+pymysql://root:trilochan@host.docker.internal:3306/url_shortener
+
+#     depends_on:
+#       mysql:
+#         condition: service_healthy
+
+
+# volumes:
+
+#   mysql_data:
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: url-shortener-redis
+
+    restart: unless-stopped
+
+  api:
+    build: .
+
+    container_name: url-shortener-api
+
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      DATABASE_URL: "mysql+pymysql://root:username@host.docker.internal:3306/url_shortener"
+
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+
+    depends_on:
+      - redis
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 500M
