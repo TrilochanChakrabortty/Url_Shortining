@@ -20,6 +20,8 @@ from authlib.integrations.starlette_client import OAuth
 
 from sqlalchemy.orm import Session
 
+import socket
+
 
 # ============================================================
 # DATABASE
@@ -76,6 +78,8 @@ from app.utils.auth import (
     create_access_token,
     get_current_user,
     get_optional_current_user,
+    needs_argon2_migration,
+    migrate_password_to_argon2,
 )
 
 
@@ -225,6 +229,10 @@ def login_user(
     db: Session = Depends(get_db),
 ):
 
+    # ========================================================
+    # FIND USER
+    # ========================================================
+
     user = (
         db.query(models.User)
         .filter(
@@ -240,15 +248,67 @@ def login_user(
             detail="Invalid username or password",
         )
 
-    if not verify_password(
+    # ========================================================
+    # VERIFY PASSWORD
+    # ========================================================
+
+    password_valid = verify_password(
         user_data.password,
         user.password_hash,
-    ):
+    )
+
+    if not password_valid:
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
+
+    # ========================================================
+    # BCRYPT → ARGON2ID MIGRATION
+    # ========================================================
+
+    if needs_argon2_migration(
+        user.password_hash
+    ):
+
+        try:
+
+            print(
+                f"MIGRATING USER {user.id} "
+                f"FROM BCRYPT TO ARGON2ID"
+            )
+
+            new_password_hash = (
+                migrate_password_to_argon2(
+                    user_data.password
+                )
+            )
+
+            user.password_hash = new_password_hash
+
+            db.commit()
+
+            print(
+                f"USER {user.id} "
+                f"SUCCESSFULLY MIGRATED TO ARGON2ID"
+            )
+
+        except Exception as e:
+
+            db.rollback()
+
+            print(
+                "PASSWORD MIGRATION ERROR:",
+                repr(e)
+            )
+
+            # Do NOT reject an otherwise valid login
+            # just because migration failed.
+
+    # ========================================================
+    # CREATE JWT
+    # ========================================================
 
     access_token = create_access_token(
         data={
@@ -258,6 +318,10 @@ def login_user(
             minutes=ACCESS_TOKEN_EXPIRE_MINUTES
         ),
     )
+
+    # ========================================================
+    # RESPONSE
+    # ========================================================
 
     return {
         "message": "Login successful",
@@ -269,7 +333,6 @@ def login_user(
             "email": user.email,
         },
     }
-
 
 # ============================================================
 # GOOGLE LOGIN
@@ -763,7 +826,16 @@ def shorten_url(
         "click_count": new_url.click_count,
     }
 
+import os
+import socket
 
+@app.get("/instance")
+def get_instance():
+
+    return {
+        "instance": os.getenv("INSTANCE_ID", "unknown"),
+        "hostname": socket.gethostname(),
+    }
 # ============================================================
 # REDIRECT SHORT URL
 # ============================================================
@@ -844,3 +916,4 @@ def debug_headers(
         ),
         "all_headers": dict(request.headers),
     }
+    

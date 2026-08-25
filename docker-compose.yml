@@ -1,84 +1,170 @@
 # services:
 
-#   mysql:
-#     image: mysql:8.0
-#     container_name: url-shortener-mysql
+#   redis:
+#     image: redis:7-alpine
 
-#     environment:
-#       MYSQL_ROOT_PASSWORD: trilochan
-#       MYSQL_DATABASE: url_shortener
+#     container_name: url-shortener-redis
 
-#     ports:
-#       - "3307:3306"
-
-#     volumes:
-#       - mysql_data:/var/lib/mysql
-
-#     healthcheck:
-#       test:
-#         [
-#           "CMD",
-#           "mysqladmin",
-#           "ping",
-#           "-h",
-#           "localhost",
-#           "-pusername"
-#         ]
-
-#       interval: 10s
-#       timeout: 5s
-#       retries: 10
-#       start_period: 20s
+#     networks:
+#       - url-shortener-network
 
 
 #   api:
 #     build: .
-#     container_name: url-shortener-api
 
-#     ports:
-#       - "8000:8000"
+#     restart: unless-stopped
 
 #     environment:
-#       DATABASE_URL: mysql+pymysql://root:trilochan@host.docker.internal:3306/url_shortener
+#       DATABASE_URL: "mysql+pymysql://root:trilochan@host.docker.internal:3306/url_shortener"
+#       REDIS_HOST: redis
+#       REDIS_PORT: 6379
+
+#     expose:
+#       - "8000"
 
 #     depends_on:
-#       mysql:
-#         condition: service_healthy
+#       - redis
+
+#     networks:
+#       - url-shortener-network
+
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: "1.0"
+#           memory: 400M
 
 
-# volumes:
+#   nginx:
+#     image: nginx:alpine
 
-#   mysql_data:
+#     container_name: url-shortener-nginx
+
+#     restart: unless-stopped
+
+#     ports:
+#       - "8000:80"
+
+#     volumes:
+#       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+
+#     depends_on:
+#       - api
+
+#     networks:
+#       - url-shortener-network
+
+
+# networks:
+
+#   url-shortener-network:
+#     driver: bridge
 
 services:
 
-  redis:
-    image: redis:7-alpine
-    container_name: url-shortener-redis
+  # ============================================================
+  # API INSTANCE 1
+  # ============================================================
 
-    restart: unless-stopped
-
-  api:
+  api-1:
     build: .
 
-    container_name: url-shortener-api
-
     restart: unless-stopped
 
-    ports:
-      - "8000:8000"
-
     environment:
-      DATABASE_URL: "mysql+pymysql://root:username@host.docker.internal:3306/url_shortener"
+      INSTANCE_ID: "api-1"
+
+      DATABASE_URL: "mysql+pymysql://root:@host.docker.internal:3306/url_shortener"
 
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
 
+      SECRET_KEY: ""
+
+    expose:
+      - "8000"
+
     depends_on:
       - redis
 
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 500M
+    networks:
+      - url-shortener-network
+
+
+  # ============================================================
+  # API INSTANCE 2
+  # ============================================================
+
+  api-2:
+    build: .
+
+    restart: unless-stopped
+
+    environment:
+      INSTANCE_ID: "api-2"
+
+      DATABASE_URL: "mysql+pymysql://root:@host.docker.internal:3306/url_shortener"
+
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+
+      SECRET_KEY: ""
+
+    expose:
+      - "8000"
+
+    depends_on:
+      - redis
+
+    networks:
+      - url-shortener-network
+
+
+  # ============================================================
+  # REDIS
+  # ============================================================
+
+  redis:
+    image: redis:7-alpine
+
+    container_name: url-shortener-redis
+
+    restart: unless-stopped
+
+    networks:
+      - url-shortener-network
+
+
+  # ============================================================
+  # NGINX LOAD BALANCER
+  # ============================================================
+
+  nginx:
+    image: nginx:alpine
+
+    container_name: url-shortener-nginx
+
+    restart: unless-stopped
+
+    ports:
+      - "8000:80"
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+
+    depends_on:
+      - api-1
+      - api-2
+
+    networks:
+      - url-shortener-network
+
+
+# ==============================================================
+# NETWORK
+# ==============================================================
+
+networks:
+
+  url-shortener-network:
+    driver: bridge
