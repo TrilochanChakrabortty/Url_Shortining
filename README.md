@@ -1,26 +1,39 @@
-# URL Shortener API
+The application supports both:
 
-A backend URL Shortener API built with **FastAPI**, **MySQL**, **SQLAlchemy**, **Redis**, and **JWT Authentication**.
+Guest users
+Registered users
 
-The application allows both guest and registered users to create shortened URLs. Registered users can authenticate using JWT tokens, while Redis is used for rate limiting and controlling guest usage.
+Registered users can authenticate using JWT tokens and perform authenticated URL-shortening operations.
 
-The project also includes a comprehensive automated test suite using **Pytest**.
+Guest users can shorten URLs without creating an account, but their usage is restricted using Redis.
 
----
+The application also uses:
 
-# 🚀 Features
+MySQL for persistent data
+Redis for rate limiting and shared state
+Nginx for reverse proxying and load balancing
+Docker for containerization
+Two FastAPI instances for horizontal scaling
+Fernet encryption for protecting database credentials
+Locust for performance testing
 
-## 🔗 URL Shortening
+The public application endpoint when running the Docker architecture is:
 
-- Convert a long URL into a unique short URL.
-- Automatically generate a **6-character short code**.
-- Check for short-code collisions before saving.
-- Store the original URL and generated short code in MySQL.
-- Generate a SHA-256 hash of the original URL.
+http://localhost:8000
+🚀 Features
+🔗 URL Shortening
 
-### Workflow
+The application can:
 
-```text
+Convert a long URL into a unique short URL.
+Automatically generate a 6-character short code.
+Check for short-code collisions before saving.
+Store the original URL in MySQL.
+Store the generated short code.
+Generate a SHA-256 hash of the original URL.
+Track the number of clicks.
+Support both guest and authenticated users.
+Workflow
 Original URL
      │
      ▼
@@ -33,41 +46,38 @@ Generate Short Code
 Check for Collision
      │
      ▼
+Check Duplicate URL
+     │
+     ▼
 Save to Database
      │
      ▼
 Return Short URL
-```
 
 Example:
 
-```text
 Original URL:
+
 https://example.com
 
         ↓
 
 Short URL:
+
 http://localhost:8000/abc123
-```
-
----
-
-# 👤 Guest Users
+👤 Guest Users
 
 Guest users can shorten URLs without creating an account.
 
-However, guest users have a limited number of URL shortening attempts.
+However, guest users have a limited number of URL-shortening attempts.
 
 Current guest limit:
 
-```text
 5 URL shortening attempts
-```
 
-### Guest User Workflow
+Guest usage is tracked using Redis.
 
-```text
+Guest User Workflow
 Guest Request
       │
       ▼
@@ -76,26 +86,18 @@ Check General Rate Limit
       ▼
 Check Guest Usage Limit
       │
-      ├───────────────┐
-      │               │
-   Allowed        Limit Reached
-      │               │
-      ▼               ▼
-Create URL        Return 403
-                  Guest limit reached
-```
-
-Guest usage is tracked using Redis.
-
----
-
-# 🔐 User Authentication
+      ├─────────────────────┐
+      │                     │
+   Allowed              Limit Reached
+      │                     │
+      ▼                     ▼
+Create URL               Return 403
+                         Guest limit reached
+🔐 User Authentication
 
 Registered users can create accounts and log in to receive a JWT access token.
 
-## Registration Workflow
-
-```text
+Registration Workflow
 Register User
       │
       ▼
@@ -109,11 +111,7 @@ Save User in Database
       │
       ▼
 Registration Successful
-```
-
-## Login Workflow
-
-```text
+Login Workflow
 Username + Password
         │
         ▼
@@ -127,26 +125,20 @@ Generate JWT Token
         │
         ▼
 Return Access Token
-```
-
----
-
-# 🔑 JWT Authentication
+🔑 JWT Authentication
 
 The project uses JWT tokens for authenticated requests.
 
-The token contains the user identifier:
+A JWT contains information such as:
 
-```json
 {
   "sub": "user_id",
   "exp": "expiration_time"
 }
-```
 
-### Authentication Workflow
+The sub claim represents the authenticated user's ID.
 
-```text
+Authentication Workflow
 Client Request
       │
       ▼
@@ -162,41 +154,64 @@ Decode JWT
 Extract "sub"
       │
       ▼
+Convert User ID
+      │
+      ▼
 Find User in Database
       │
       ▼
 User Authenticated
-```
 
 Invalid tokens are rejected with:
 
-```text
 401 Unauthorized
-```
 
 The authentication system handles:
 
-- Invalid JWT tokens.
-- Missing `sub` claim.
-- Tokens containing nonexistent user IDs.
-- Missing users.
-- Valid authenticated users.
+Missing credentials
+Invalid JWT tokens
+Expired tokens
+Invalid JWT signatures
+Missing sub claim
+Invalid user IDs
+Nonexistent users
+Valid authenticated users
+🔄 Multi-Instance JWT Authentication
 
----
+Because the application runs multiple FastAPI instances, both instances must use the same JWT SECRET_KEY.
 
-# 🔒 Password Security
+Example:
 
-Passwords are not stored directly in the database.
+API-1 generates JWT
+        │
+        ▼
+Client receives token
+        │
+        ▼
+Client sends token
+        │
+        ▼
+Nginx routes request
+        │
+        ▼
+API-2 receives request
+        │
+        ▼
+API-2 validates same JWT
+        │
+        ▼
+Request succeeds
 
-The project uses:
+Using different JWT secrets between API instances would cause authentication failures when a token generated by one instance reaches another instance.
 
-```text
+🔒 Password Security
+
+User passwords are never stored directly as plaintext.
+
+The application uses:
+
 Passlib + Bcrypt
-```
-
-### Password Storage Workflow
-
-```text
+Password Storage Workflow
 Plain Password
       │
       ▼
@@ -204,11 +219,7 @@ Bcrypt Hashing
       │
       ▼
 Store Hashed Password
-```
-
-### Login Verification
-
-```text
+Login Verification
 Entered Password
       │
       ▼
@@ -216,23 +227,17 @@ Verify Against Stored Hash
       │
       ▼
 Authentication Result
-```
 
----
+Bcrypt is used for user-password hashing because user passwords should not be reversibly encrypted.
 
-# ⚡ Rate Limiting
+⚡ Rate Limiting
 
 Redis is used to implement request rate limiting.
 
 Current general rate limit:
 
-```text
 60 requests per minute per IP
-```
-
-### Rate Limiting Workflow
-
-```text
+Rate Limiting Workflow
 Incoming Request
         │
         ▼
@@ -250,32 +255,24 @@ Increment Counter
         ▼
 Check Limit
         │
-   ┌────┴─────┐
-   │          │
-Allowed    Exceeded
-   │          │
-   ▼          ▼
-Continue   Return 429
-Request
-```
+        ├───────────────┐
+        │               │
+     Allowed         Exceeded
+        │               │
+        ▼               ▼
+    Continue          Return 429
+    Request
 
 Redis automatically expires the rate-limit key after the configured time window.
 
----
+👥 Guest Usage Limiting
 
-# 👥 Guest Usage Limiting
-
-Guest usage is controlled using Redis.
+Guest usage is controlled separately using Redis.
 
 Redis key structure:
 
-```text
 guest_usage:<client_ip>
-```
-
-### Workflow
-
-```text
+Workflow
 Guest Shorten Request
         │
         ▼
@@ -283,36 +280,32 @@ Check Redis Counter
         │
         ▼
 First Request?
-   ┌────┴─────┐
-   │          │
-  Yes         No
-   │          │
-   ▼          ▼
-Set Count    Check Count
-   = 1          │
-                ▼
-          Count < Limit?
-             │       │
-            Yes      No
-             │       │
-             ▼       ▼
-         Increment  Return 403
-             │
-             ▼
-        Allow Request
-```
+        │
+        ├───────────────┐
+        │               │
+       Yes              No
+        │               │
+        ▼               ▼
+   Set Count = 1    Check Count
+                        │
+                        ▼
+                  Count < Limit?
+                    │       │
+                   Yes      No
+                    │       │
+                    ▼       ▼
+                Increment  Return 403
+                    │
+                    ▼
+               Allow Request
+🔁 Duplicate URL Handling
 
----
+Duplicate URL handling differs between authenticated and guest users.
 
-# 🔁 Duplicate URL Handling
-
-Duplicate handling works differently for guest and authenticated users.
-
-## Registered User
+Registered User
 
 If the same authenticated user submits the same URL again:
 
-```text
 User A
    │
    ▼
@@ -321,53 +314,43 @@ https://example.com
    ▼
 Already Exists?
    │
-   ├──── Yes ────► Return Existing Short URL
+   ├── Yes ──► Return Existing Short URL
    │
-   └──── No ─────► Create New URL
-```
+   └── No ───► Create New URL
 
-The system prevents creating duplicate records for the same user and URL.
+The system prevents unnecessary duplicate records for the same user and URL.
 
-## Different Users
+Different Users
 
 Different users can shorten the same original URL.
 
 Example:
 
-```text
 User A
 https://example.com
       │
       ▼
-abc123
+   abc123
 
 
 User B
 https://example.com
       │
       ▼
-xyz789
-```
+   xyz789
 
-Each registered user can have their own URL record.
+Each authenticated user can have their own URL record.
 
-## Guest Users
+Guest Users
 
-Guest URLs are created without a user ID.
+Guest URLs are created without an authenticated user ID:
 
-```text
 user_id = None
-```
-
----
-
-# 🔒 Short Code Collision Handling
+🔒 Short Code Collision Handling
 
 Before saving a new URL, the application verifies that the generated short code does not already exist.
 
-### Workflow
-
-```text
+Workflow
 Generate Short Code
         │
         ▼
@@ -375,28 +358,24 @@ Check Database
         │
         ▼
 Already Exists?
-   │            │
-  Yes           No
-   │            │
-   ▼            ▼
-Generate Again  Save URL
-```
+        │
+        ├──────────────┐
+       Yes             No
+        │               │
+        ▼               ▼
+Generate Again       Save URL
 
-This ensures that every stored short code is unique.
+This prevents two stored URL records from using the same short code.
 
----
-
-# ↪️ URL Redirection
+↪️ URL Redirection
 
 When a user visits a shortened URL:
 
-```text
 http://localhost:8000/abc123
-```
 
-The application performs the following workflow:
+the application searches for the corresponding short code.
 
-```text
+Workflow
 Request Short URL
         │
         ▼
@@ -404,63 +383,60 @@ Find Short Code in Database
         │
         ▼
 Found?
-   │            │
-  Yes           No
-   │            │
-   ▼            ▼
-Increase      Return 404
-Click Count
-   │
-   ▼
+        │
+        ├──────────────┐
+       Yes             No
+        │               │
+        ▼               ▼
+Increase Click       Return 404
+Count
+        │
+        ▼
 Redirect to
 Original URL
-```
-
----
-
-# 📊 Click Tracking
+📊 Click Tracking
 
 Each URL contains a click counter.
 
 Initial value:
 
-```text
 click_count = 0
-```
 
 After the first redirect:
 
-```text
 0 → 1
-```
 
 After multiple redirects:
 
-```text
 1 → 2 → 3 → 4 ...
-```
 
 The click count is updated in the database.
 
----
+🗄️ Database
 
-# 🗄️ Database
+The application uses:
 
-The application uses **MySQL** with **SQLAlchemy ORM**.
+MySQL
++
+SQLAlchemy ORM
++
+PyMySQL
 
-## User Model
+The database is used for persistent application data.
 
-```text
+User Model
+
+Conceptually:
+
 User
 ├── id
 ├── username
 ├── email
 └── password_hash
-```
+URL Model
 
-## URL Model
+Conceptually:
 
-```text
 URL
 ├── id
 ├── original_url
@@ -468,74 +444,396 @@ URL
 ├── short_code
 ├── click_count
 └── user_id
-```
 
 For guest-created URLs:
 
-```text
 user_id = NULL
-```
 
 For authenticated users:
 
-```text
 user_id = authenticated user's ID
-```
+🧩 SQLAlchemy Connection Pooling
 
----
+The application uses SQLAlchemy connection pooling.
 
-# 🧪 Testing
+Example configuration:
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=1800,
+)
+Setting	Value	Purpose
+pool_size	10	Base pooled database connections
+max_overflow	20	Additional temporary connections
+pool_timeout	30 sec	Maximum wait time for a connection
+pool_recycle	1800 sec	Recycle connections after 30 minutes
+
+Connection pooling improves database efficiency by reusing established database connections.
+
+🔴 Redis
+
+Redis is used as a shared in-memory data store.
+
+The Docker Redis service uses:
+
+redis:
+  image: redis:7-alpine
+
+The API instances connect using:
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+Both API instances connect to the same Redis service:
+
+              ┌─────────────┐
+              │    Redis    │
+              └──────┬──────┘
+                     │
+              ┌──────┴──────┐
+              │             │
+              ▼             ▼
+           API-1          API-2
+
+Shared Redis is important for:
+
+Rate limiting
+Guest usage tracking
+Shared application state
+Future caching functionality
+🐳 Docker Architecture
+
+The application is containerized using Docker.
+
+The Docker Compose architecture contains:
+
+API-1
+API-2
+Redis
+Nginx
+
+All services communicate through a shared Docker network:
+
+url-shortener-network
+
+Conceptually:
+
+Docker Network
+│
+├── api-1
+├── api-2
+├── redis
+└── nginx
+⚡ FastAPI Instances
+
+The application runs two FastAPI instances:
+
+api-1
+api-2
+
+Both instances use the same application image.
+
+Each API runs Uvicorn internally on:
+
+8000
+
+The API containers use:
+
+expose:
+  - "8000"
+
+instead of publishing their ports directly to the host.
+
+This makes Nginx the public entry point.
+
+Instance Identification
+
+Each API receives a unique environment variable.
+
+API-1:
+
+environment:
+  INSTANCE_ID: "api-1"
+
+API-2:
+
+environment:
+  INSTANCE_ID: "api-2"
+
+The /instance endpoint is used to identify which backend handled a request.
+
+Example:
+
+{
+  "instance": "api-1"
+}
+
+or:
+
+{
+  "instance": "api-2"
+}
+
+This endpoint is mainly useful for validating load balancing and multi-instance behavior.
+
+🌐 Nginx Load Balancing
+
+Nginx acts as:
+
+Reverse proxy
+Load balancer
+Public entry point
+
+The upstream backend contains both FastAPI instances:
+
+upstream url_shortener_backend {
+
+    server api-1:8000;
+    server api-2:8000;
+
+}
+
+Requests are forwarded using:
+
+proxy_pass http://url_shortener_backend;
+
+The architecture is:
+
+Client
+   │
+   ▼
+localhost:8000
+   │
+   ▼
+Nginx :80
+   │
+   ├──────────────┐
+   ▼              ▼
+API-1           API-2
+
+Typical Nginx configuration:
+
+events {}
+
+http {
+
+    upstream url_shortener_backend {
+
+        server api-1:8000;
+        server api-2:8000;
+
+    }
+
+    server {
+
+        listen 80;
+
+        location / {
+
+            proxy_pass http://url_shortener_backend;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+🔐 Database Credential Encryption
+
+A database credential security layer was introduced so the MySQL password is not directly stored as plaintext in the Docker Compose configuration.
+
+The main files involved are:
+
+app/database.py
+app/utils/encryption.py
+
+The runtime flow is:
+
+DB_PASSWORD_ENCRYPTED
+        +
+DB_ENCRYPTION_KEY
+        │
+        ▼
+decrypt_value()
+        │
+        ▼
+Actual MySQL Password
+        │
+        ▼
+SQLAlchemy
+        │
+        ▼
+MySQL
+🔑 Why Encryption Instead of Hashing?
+
+The application must recover the real MySQL password at runtime in order to connect to the database.
+
+Hashing is one-way:
+
+Password
+   │
+   ▼
+Hash
+
+The original password cannot normally be recovered.
+
+Encryption is reversible:
+
+Password
+   │
+   ▼
+Encryption
+   │
+   ▼
+Encrypted Password
+   │
+   ▼
+Decryption
+   │
+   ▼
+Password
+
+Therefore, encryption is appropriate for a database credential that the application must recover at runtime.
+
+This is different from user-password storage, where hashing is the appropriate approach.
+
+🔑 Fernet Encryption
+
+The project uses Fernet from the Python cryptography package.
+
+A valid Fernet key can be generated using:
+
+from cryptography.fernet import Fernet
+
+key = Fernet.generate_key()
+
+print(key.decode())
+
+The generated key is supplied through:
+
+DB_ENCRYPTION_KEY=<FERNET_KEY>
+
+The encrypted database password is supplied through:
+
+DB_PASSWORD_ENCRYPTED=<ENCRYPTED_PASSWORD>
+
+The encryption key and encrypted password must belong to the same encryption pair.
+
+🗃️ Database Credential Configuration
+
+The database configuration is located at:
+
+app/database.py
+
+The application reads:
+
+DB_USER = os.getenv("DB_USER", "root")
+
+DB_PASSWORD_ENCRYPTED = os.getenv(
+    "DB_PASSWORD_ENCRYPTED"
+)
+
+DB_ENCRYPTION_KEY = os.getenv(
+    "DB_ENCRYPTION_KEY"
+)
+
+DB_HOST = os.getenv(
+    "DB_HOST",
+    "host.docker.internal"
+)
+
+DB_PORT = os.getenv(
+    "DB_PORT",
+    "3306"
+)
+
+DB_NAME = os.getenv(
+    "DB_NAME",
+    "url_shortener"
+)
+
+The encrypted password is decrypted during application startup:
+
+DB_PASSWORD = decrypt_value(
+    DB_PASSWORD_ENCRYPTED,
+    DB_ENCRYPTION_KEY,
+)
+
+The decrypted password is then used to construct the SQLAlchemy database URL.
+
+⚙️ Environment Variables
+
+A conceptual .env configuration for the Docker architecture is:
+
+SECRET_KEY=<JWT_SECRET>
+
+DB_USER=root
+DB_HOST=host.docker.internal
+DB_PORT=3306
+DB_NAME=url_shortener
+
+DB_PASSWORD_ENCRYPTED=<ENCRYPTED_DB_PASSWORD>
+DB_ENCRYPTION_KEY=<FERNET_KEY>
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+Do not place real secret values in this README.
+
+The .env file should be excluded from Git:
+
+.env
+🧪 Testing
 
 The project uses:
 
-- Pytest
-- FastAPI TestClient
-- SQLAlchemy Test Database
-- Redis
+Pytest
+FastAPI TestClient
+SQLAlchemy test database
+Redis
 
 The test suite covers the major functionality of the application.
 
----
-
-# ✅ Short Code Testing
+✅ Short Code Testing
 
 Tests include:
 
-- Generated short code length validation.
-- Default short code length of 6 characters.
-- Empty values handling.
-- Invalid lengths handling.
-- Negative lengths handling.
-- Short code collision handling.
+Generated short-code length validation
+Default short-code length of 6 characters
+Empty values handling
+Invalid lengths handling
+Negative lengths handling
+Short-code collision handling
+🔐 Authentication Testing
+Password Testing
 
----
+Tests include:
 
-# 🔐 Authentication Testing
+Password hashing
+Correct password verification
+Incorrect password rejection
+Password validation
+JWT Testing
 
-## Password Testing
+Tests include:
 
-- Password hashing.
-- Correct password verification.
-- Incorrect password rejection.
-- Password validation.
-
-## JWT Testing
-
-- JWT token generation.
-- JWT payload validation.
-- Token expiration.
-- Invalid token rejection.
-- Missing `sub` claim rejection.
-- Nonexistent user rejection.
-- Valid token returns the correct user.
-
----
-
-# 👤 Registration Testing
+JWT token generation
+JWT payload validation
+Token expiration
+Invalid token rejection
+Missing sub claim rejection
+Nonexistent user rejection
+Valid token returning the correct user
+👤 Registration Testing
 
 Tests verify:
 
-```text
 Register User
       │
       ▼
@@ -546,45 +844,37 @@ Verify Response Data
       │
       ▼
 Verify User Exists in Test Database
-```
 
 The tests confirm:
 
-- Successful registration.
-- Correct username.
-- Correct email.
-- User persistence in the database.
-
----
-
-# 🔗 URL Shortening Testing
+Successful registration
+Correct username
+Correct email
+User persistence in the database
+🔗 URL Shortening Testing
 
 The URL shortening functionality is tested for:
 
-- Successful URL shortening.
-- Authenticated URL creation.
-- Guest URL creation.
-- Database persistence.
-- Duplicate URL detection.
-- Different users shortening the same URL.
-- Short-code uniqueness.
-- Short-code collision handling.
-
----
-
-# ⚡ Rate Limiter Testing
+Successful URL shortening
+Authenticated URL creation
+Guest URL creation
+Database persistence
+Duplicate URL detection
+Different users shortening the same URL
+Short-code uniqueness
+Short-code collision handling
+⚡ Rate Limiter Testing
 
 The Redis rate limiter is tested for:
 
-- First request.
-- Multiple requests within the allowed limit.
-- Requests exactly at the limit.
-- Requests exceeding the limit.
-- Redis key expiration.
+First request
+Multiple requests within the allowed limit
+Requests exactly at the limit
+Requests exceeding the limit
+Redis key expiration
 
 Example:
 
-```text
 Limit = 5
 
 Request 1 → Allowed
@@ -593,71 +883,51 @@ Request 3 → Allowed
 Request 4 → Allowed
 Request 5 → Allowed
 Request 6 → Blocked
-```
-
----
-
-# 👥 Guest Limit Testing
+👥 Guest Limit Testing
 
 Guest usage tests include:
 
-- First guest request.
-- Multiple guest requests within the limit.
-- Guest blocked after reaching the limit.
-- Guest usage count stored in Redis.
-
----
-
-# ↪️ Redirection Testing
+First guest request
+Multiple guest requests within the limit
+Guest blocked after reaching the limit
+Guest usage count stored in Redis
+↪️ Redirection Testing
 
 Tests verify:
 
-- Valid short URL redirects correctly.
-- First click increments count.
-- Multiple clicks increment correctly.
-- Invalid short code returns `404`.
+Valid short URL redirects correctly
+First click increments count
+Multiple clicks increment correctly
+Invalid short code returns 404
+🚫 Input Validation Testing
 
----
+The URL input is validated using FastAPI/Pydantic URL validation.
 
-# 🚫 Input Validation Testing
+Example:
 
-The URL input is validated using:
-
-```python
 HttpUrl
-```
 
 Tests include:
 
-```text
 ✓ Valid URL
 ✓ Invalid URL
 ✓ Empty URL
 ✓ Missing URL
 ✓ Null URL
-```
 
 Invalid input returns:
 
-```text
 422 Unprocessable Entity
-```
-
----
-
-# 🧪 Test Database
+🧪 Test Database
 
 The application uses a separate MySQL database for testing.
 
 Example:
 
-```text
 url_shortener_test
-```
 
-The testing workflow uses SQLAlchemy transactions to isolate tests.
+The testing workflow uses database transactions to isolate tests.
 
-```text
 Start Test
     │
     ▼
@@ -671,15 +941,15 @@ Rollback Transaction
     │
     ▼
 Clean State
-```
 
 This helps prevent test data from permanently affecting the test database.
 
----
+📁 Project Structure
 
-# 📁 Project Structure
+The project has evolved as new features were introduced.
 
-```text
+The important structure is approximately:
+
 Url-Shortner/
 │
 ├── app/
@@ -688,9 +958,10 @@ Url-Shortner/
 │   ├── database.py
 │   ├── config.py
 │   ├── redis_client.py
-│   ├── auth.py
 │   │
 │   └── utils/
+│       ├── auth.py
+│       ├── encryption.py
 │       ├── short_code.py
 │       └── rate_limiter.py
 │
@@ -701,285 +972,709 @@ Url-Shortner/
 │   ├── test_url_validation.py
 │   └── test_auth_dependency.py
 │
+├── docker-compose.yml
+├── Dockerfile
+├── nginx.conf
+├── locustfile.py
 ├── .env
 ├── .gitignore
 ├── requirements.txt
 └── README.md
-```
 
-> Note: The exact structure may vary slightly depending on the current project files.
+Note: The exact structure may vary slightly depending on the current project files.
 
----
-
-# ⚙️ Installation
-
-## 1. Clone the Repository
-
-```bash
+⚙️ Installation
+1. Clone the Repository
 git clone https://github.com/TrilochanChakrabortty/Url_Shortining.git
-```
 
 Move into the project:
 
-```bash
 cd Url_Shortining
-```
-
----
-
-## 2. Create a Virtual Environment
-
-```bash
+🐍 2. Create a Virtual Environment
 python -m venv venv
-```
 
 Activate it on Windows:
 
-```powershell
 venv\Scripts\activate
-```
-
----
-
-## 3. Install Dependencies
-
-```bash
+📦 3. Install Dependencies
 pip install -r requirements.txt
-```
-
----
-
-# 🔧 Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-DATABASE_URL=mysql+pymysql://USERNAME:PASSWORD@localhost:3306/url_shortener
-
-SECRET_KEY=your_secret_key
-
-ALGORITHM=HS256
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-```
-
-> Never commit your `.env` file to GitHub.
-
----
-
-# 🗄️ Create the MySQL Database
+🗄️ Create the MySQL Database
 
 Example:
 
-```sql
 CREATE DATABASE url_shortener;
-```
 
 For testing:
 
-```sql
 CREATE DATABASE url_shortener_test;
-```
+🔴 Start Redis Without Docker
 
----
-
-# 🔴 Start Redis
-
-Make sure Redis is running before starting the application.
+If running the application without Docker, make sure Redis is running.
 
 Example:
 
-```bash
 redis-server
-```
 
 Verify Redis:
 
-```bash
 redis-cli ping
-```
 
 Expected response:
 
-```text
 PONG
-```
-
----
-
-# ▶️ Run the Application
+▶️ Run the Application Without Docker
 
 Start the FastAPI server:
 
-```bash
 uvicorn app.main:app --reload
-```
 
 The application will run at:
 
-```text
 http://127.0.0.1:8000
-```
+🐳 Running With Docker
 
----
+The recommended architecture uses Docker Compose.
 
-# 📚 API Documentation
+Make sure Docker Desktop is running.
+
+From the project root:
+
+docker compose up -d --build
+🔍 Verify Containers
+
+Run:
+
+docker ps
+
+Expected services include:
+
+url-shortner-api-1-1
+url-shortner-api-2-1
+url-shortener-nginx
+url-shortener-redis
+
+Container names may vary depending on the Docker Compose project name.
+
+📋 Check API Logs
+
+API-1:
+
+docker logs --tail 50 url-shortner-api-1-1
+
+API-2:
+
+docker logs --tail 50 url-shortner-api-2-1
+
+A healthy API should show:
+
+Application startup complete.
+Uvicorn running on http://0.0.0.0:8000
+🌐 Public Docker Endpoint
+
+When running the complete Docker architecture:
+
+http://localhost:8000
+
+The request path is:
+
+Client
+   │
+   ▼
+localhost:8000
+   │
+   ▼
+Nginx
+   │
+   ├──────────────┐
+   ▼              ▼
+API-1           API-2
+📚 API Documentation
 
 FastAPI automatically provides interactive API documentation.
 
-Swagger UI:
+Swagger UI
+http://localhost:8000/docs
+ReDoc
+http://localhost:8000/redoc
 
-```text
+When running without Docker:
+
 http://127.0.0.1:8000/docs
-```
+🧪 Load Balancing Verification
 
-ReDoc:
+The /instance endpoint is used to verify that Nginx is distributing requests between API-1 and API-2.
 
-```text
-http://127.0.0.1:8000/redoc
-```
+Test API-1 Directly Inside Docker
+docker exec url-shortener-nginx wget -qO- http://api-1:8000/instance
 
----
+Expected:
 
-# 🧪 Run Tests
+{
+  "instance": "api-1"
+}
+Test API-2 Directly Inside Docker
+docker exec url-shortener-nginx wget -qO- http://api-2:8000/instance
 
-Run the complete test suite:
+Expected:
 
-```bash
-pytest -v
-```
+{
+  "instance": "api-2"
+}
 
-Run a specific test file:
+These tests verify that both API containers are reachable from Nginx.
 
-```bash
-pytest tests/test_auth_dependency.py -v
-```
+🔄 Test Nginx Load Balancing
 
-Run a specific test:
+Run:
 
-```bash
-pytest tests/test_auth_dependency.py::test_get_current_user_returns_valid_user -v
-```
+curl.exe http://localhost:8000/instance
 
----
+Run multiple requests:
 
-# 🔄 Complete Application Workflow
+1..20 | ForEach-Object {
+    curl.exe -s http://localhost:8000/instance
+    Write-Host ""
+}
 
-```text
-                    USER
-                     │
-                     ▼
-              POST /shorten
-                     │
-                     ▼
-             Validate URL Input
-                     │
-                     ▼
-              Check Rate Limit
-                     │
-          ┌──────────┴──────────┐
-          │                     │
-       Allowed               Blocked
-          │                     │
-          ▼                     ▼
-   Check Authentication      Return 429
+Expected output should contain both:
+
+api-1
+api-2
+
+Example:
+
+{"instance":"api-1"}
+{"instance":"api-2"}
+{"instance":"api-1"}
+{"instance":"api-2"}
+{"instance":"api-1"}
+{"instance":"api-2"}
+
+This confirms that the public Nginx endpoint can route requests to both FastAPI instances.
+
+📈 Performance Testing With Locust
+
+The Locust test file is:
+
+locustfile.py
+
+The test simulates multiple users interacting with the application.
+
+Each Locust user:
+
+Logs in once.
+Receives a JWT access token.
+Stores the token.
+Generates a unique URL.
+Sends authenticated requests to /shorten.
+
+The unique URL is generated using UUID:
+
+unique_url = (
+    f"https://performance-test.com/"
+    f"{uuid.uuid4()}"
+)
+
+The authorization header is:
+
+Authorization: Bearer <access_token>
+
+The current wait time is:
+
+wait_time = constant(1)
+📊 Performance Tests Performed
+
+The application was tested progressively.
+
+Test 1
+Users: 10
+Spawn Rate: 2 users/sec
+Test 2
+Users: 50
+Spawn Rate: 5 users/sec
+Test 3
+Users: 100
+Spawn Rate: 5 users/sec
+
+The 100-user test initially produced authentication failures.
+
+The failures were investigated across:
+
+JWT configuration
+JWT secret configuration
+Token validation
+Authentication dependency
+API instance configuration
+Docker environment variables
+Nginx routing
+Multi-instance behavior
+
+After the configuration was corrected, the 100-user Locust test ran successfully without the earlier authentication failures.
+
+🧪 Running Locust
+
+Start Locust from the project root:
+
+locust -f locustfile.py
+
+Locust normally provides its web interface at:
+
+http://localhost:8089
+
+Configure the target host according to the environment being tested.
+
+For the Dockerized public application:
+
+http://localhost:8000
+🐛 Troubleshooting
+1. Container Name Does Not Exist
+
+A command such as:
+
+docker exec url-shortner-api-1 ...
+
+may fail because Docker Compose generated a different container name.
+
+For example:
+
+url-shortner-api-1-1
+
+Always check:
+
+docker ps
+
+and use the actual container name.
+
+2. /instance Returns unknown
+
+During development, the host request:
+
+http://127.0.0.1:8000/instance
+
+temporarily returned:
+
+{
+  "instance": "unknown"
+}
+
+while Docker-internal requests correctly returned:
+
+api-1
+
+and:
+
+api-2
+
+The issue was caused by another Python/Uvicorn process running on the Windows host and using port 8000.
+
+After stopping the conflicting host process, the request correctly reached the Dockerized Nginx service.
+
+Debugging Lesson
+
+If:
+
+Docker internal request → works correctly
+
+but:
+
+Host request → unexpected response
+
+check which process owns the host port.
+
+Use:
+
+Get-NetTCPConnection -LocalPort 8000 -State Listen |
+    Select-Object LocalAddress,LocalPort,OwningProcess
+
+Then inspect the process:
+
+Get-CimInstance Win32_Process -Filter "ProcessId = <PID>" |
+    Select-Object ProcessId,ParentProcessId,Name,CommandLine
+3. Invalid Fernet Key
+
+The application initially failed with:
+
+ValueError:
+Fernet key must be 32 url-safe base64-encoded bytes.
+
+The cause was an invalid DB_ENCRYPTION_KEY.
+
+A valid Fernet key must be generated using:
+
+from cryptography.fernet import Fernet
+
+key = Fernet.generate_key()
+
+print(key.decode())
+
+The generated key must be stored in:
+
+DB_ENCRYPTION_KEY=<FERNET_KEY>
+
+The encrypted database password must also have been generated using that same key.
+
+4. Redis Port Error
+
+The application initially failed with:
+
+ValueError:
+invalid literal for int() with base 10: ''
+
+The issue was that REDIS_PORT was being passed as an empty string.
+
+The correct Docker configuration is:
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+5. MySQL Access Denied
+
+The application subsequently reached MySQL but received an error similar to:
+
+Access denied for user 'root'@'localhost'
+
+This indicated that:
+
+The application successfully reached MySQL.
+The database credential decryption layer was executing.
+The resulting password did not match the actual MySQL password.
+
+The encrypted password therefore had to be regenerated using the correct MySQL password and the current Fernet encryption key.
+
+Once the credentials matched, the API started successfully.
+
+6. JWT Validation Failures Under Load
+
+During an earlier 100-user Locust test, protected requests returned:
+
+{
+  "detail": "Could not validate credentials"
+}
+
+The investigation included:
+
+JWT secret configuration
+Token expiration
+Authentication code
+API instance configuration
+Docker environment variables
+Nginx routing
+Multi-instance behavior
+
+The final configuration was corrected and the 100-user Locust test subsequently completed successfully.
+
+🔐 Security
+
+Never commit real credentials to Git.
+
+Keep the following values private:
+
+.env
+DB_ENCRYPTION_KEY
+DB_PASSWORD_ENCRYPTED
+SECRET_KEY
+SESSION_SECRET_KEY
+MySQL passwords
+OAuth secrets
+API keys
+
+The database encryption key should not be reused as the JWT secret.
+
+For production deployments, a dedicated secret-management system is preferable.
+
+Possible solutions include:
+
+Docker Secrets
+Kubernetes Secrets
+HashiCorp Vault
+AWS Secrets Manager
+Azure Key Vault
+Google Secret Manager
+
+Additional production security improvements should include:
+
+HTTPS/TLS
+Restricted database users
+Network-level access controls
+Secret rotation
+Strong database credentials
+Firewall configuration
+Production-grade secret management
+🔄 Complete Application Workflow
+                         USER
+                           │
+                           ▼
+                     POST /shorten
+                           │
+                           ▼
+                    Validate URL
+                           │
+                           ▼
+                   Check Rate Limit
+                           │
+                 ┌─────────┴─────────┐
+                 │                   │
+              Allowed             Blocked
+                 │                   │
+                 ▼                   ▼
+         Check Authentication      429
+                 │
+          ┌──────┴──────┐
+          │             │
+        Guest       Registered
+          │             │
+          ▼             ▼
+   Check Guest      Check Existing
+   Usage Limit           URL
+          │             │
+          ▼             ▼
+       Allowed?       Exists?
+       │     │        │     │
+      Yes    No      Yes    No
+       │     │        │      │
+       ▼     ▼        ▼      ▼
+    Create 403     Return  Generate
+     URL           Existing Short Code
+                         │
+                         ▼
+                  Check Collision
+                         │
+                         ▼
+                    Save MySQL
+                         │
+                         ▼
+                  Return Short URL
+🔄 Before vs After
+Initial Architecture
+
+The original architecture was essentially:
+
+Client
+   │
+   ▼
+FastAPI
+   │
+   ▼
+MySQL
+
+This provided a single backend processing point.
+
+Current Architecture
+
+The application has been extended to:
+
+                         Client
+                           │
+                           ▼
+                         Nginx
+                           │
+                    ┌──────┴──────┐
+                    ▼             ▼
+                  API-1         API-2
+                    │             │
+                    └──────┬──────┘
+                           │
+                    ┌──────┴──────┐
+                    ▼             ▼
+                  Redis          MySQL
+
+Database credentials additionally follow:
+
+Encrypted DB Password
+          +
+   DB Encryption Key
           │
-     ┌────┴────┐
-     │         │
-  Guest      Registered
-     │         │
-     ▼         ▼
-Check Guest   Check Existing
-Usage Limit       URL
-     │             │
-     ▼             ▼
-Allowed?      Exists?
- │   │         │     │
-Yes  No       Yes    No
- │    │        │      │
- ▼    ▼        ▼      ▼
-Create 403  Return   Generate
- URL       Existing   Short Code
-                      │
-                      ▼
-                 Check Collision
-                      │
-                      ▼
-                  Save to MySQL
-                      │
-                      ▼
-                Return Short URL
-```
+          ▼
+   Runtime Decryption
+          │
+          ▼
+        MySQL
+📌 Current Project Status
 
----
+The current backend architecture includes:
 
-# 🛠️ Tech Stack
-
-| Technology | Purpose |
-|---|---|
-| Python | Backend language |
-| FastAPI | API framework |
-| SQLAlchemy | ORM |
-| MySQL | Database |
-| Redis | Rate limiting and guest usage tracking |
-| JWT | Authentication |
-| Passlib | Password hashing |
-| Bcrypt | Password hashing algorithm |
-| Pytest | Automated testing |
-| Uvicorn | ASGI server |
-
----
-
-# 📌 Current Project Status
-
-The core backend functionality has been implemented and tested.
-
-```text
-Authentication       ✅
-User Registration    ✅
-User Login           ✅
-JWT Authentication   ✅
-Password Hashing     ✅
-URL Shortening       ✅
-Guest URLs           ✅
-Duplicate Detection  ✅
-Short Code Collision ✅
-Redis Rate Limiting  ✅
-Guest Usage Limit    ✅
-URL Redirection      ✅
-Click Tracking       ✅
-Input Validation     ✅
-Automated Testing    ✅
-Full Test Suite      ✅
-```
-
----
-
-# 🔮 Future Improvements
+Authentication         ✅
+User Registration      ✅
+User Login             ✅
+JWT Authentication     ✅
+Password Hashing       ✅
+URL Shortening         ✅
+Guest URLs             ✅
+Duplicate Detection    ✅
+Short Code Collision   ✅
+Redis Rate Limiting    ✅
+Guest Usage Limit      ✅
+URL Redirection        ✅
+Click Tracking         ✅
+Input Validation       ✅
+Automated Testing      ✅
+MySQL Integration      ✅
+SQLAlchemy ORM         ✅
+Connection Pooling     ✅
+Redis Integration      ✅
+Docker                 ✅
+Docker Compose         ✅
+FastAPI Instance 1     ✅
+FastAPI Instance 2     ✅
+Nginx Reverse Proxy    ✅
+Nginx Load Balancing   ✅
+Shared Redis           ✅
+Shared MySQL           ✅
+Instance Identification ✅
+JWT Multi-Instance     ✅
+Database Encryption    ✅
+Runtime Decryption     ✅
+Locust Testing         ✅
+10 User Test           ✅
+50 User Test           ✅
+100 User Test          ✅
+🎯 Future Improvements
 
 Possible future improvements include:
 
-- Custom short URLs.
-- URL expiration dates.
-- User URL dashboard.
-- URL analytics.
-- Geographic click tracking.
-- Device and browser analytics.
-- Redis caching.
-- Refresh tokens.
-- Role-based authentication.
-- Docker containerization.
-- CI/CD pipeline.
-- Cloud deployment.
-- Structured logging.
-- API versioning.
-- Monitoring and health checks.
+Application Features
+Custom short URLs
+URL expiration dates
+User URL dashboard
+URL analytics
+Geographic click tracking
+Device and browser analytics
+Advanced URL management
+URL deletion and editing
+Performance
+Redis caching
+Database query optimization
+Database indexing
+Better connection-pool tuning
+Distributed caching
+Authentication
+Refresh tokens
+Role-based authentication
+OAuth improvements
+Account verification
+Password reset
+Infrastructure
+Docker health checks
+API health endpoints
+Nginx failure handling
+Backend timeout handling
+Retry behavior
+HTTPS/TLS
+Cloud deployment
+Monitoring
 
----
+Potential observability stack:
 
-# 👨‍💻 Author
+Prometheus
+Grafana
+OpenTelemetry
+Structured logging
+DevOps
+CI/CD pipeline
+Automated Docker builds
+GitHub Actions
+Automated deployment
+Automated integration tests
+Security
+Dedicated secret manager
+Secret rotation
+HTTPS everywhere
+Restricted database users
+Network access control
+Production firewall configuration
+🎓 Learning Outcomes
 
-**Trilochan Chakrabortty**
+This project demonstrates practical understanding of:
 
-GitHub: https://github.com/TrilochanChakrabortty
+Backend Development
+FastAPI
+REST APIs
+SQLAlchemy
+Pydantic validation
+JWT authentication
+Password hashing
+Database integration
+Databases
+MySQL
+SQLAlchemy ORM
+Connection pooling
+Database persistence
+Database credential security
+Distributed Systems
+Multiple API instances
+Shared Redis
+Load balancing
+Reverse proxying
+Stateless JWT authentication
+Horizontal scaling
+DevOps
+Docker
+Docker Compose
+Docker networking
+Nginx
+Reverse proxy
+Containerized services
+Security
+Environment variables
+JWT secrets
+Password hashing
+Fernet encryption
+Encryption/decryption
+Secure database credential handling
+Performance Engineering
+Locust
+Concurrent users
+Spawn rates
+Authentication under load
+API load testing
+Failure analysis
+Multi-instance testing
+Testing
+Pytest
+FastAPI TestClient
+Test databases
+Redis testing
+Transaction isolation
+Authentication testing
+Input validation testing
+🏗️ Final Architecture
+                         ┌──────────────────────┐
+                         │        CLIENT        │
+                         │  Browser / Locust     │
+                         └──────────┬───────────┘
+                                    │
+                                    │ HTTP :8000
+                                    ▼
+                         ┌──────────────────────┐
+                         │        NGINX         │
+                         │ Reverse Proxy +      │
+                         │ Load Balancer        │
+                         └──────────┬───────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ▼                               ▼
+             ┌─────────────┐                 ┌─────────────┐
+             │    API-1    │                 │    API-2    │
+             │   FastAPI   │                 │   FastAPI   │
+             │   :8000     │                 │   :8000     │
+             └──────┬──────┘                 └──────┬──────┘
+                    │                               │
+                    └──────────────┬────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+             ┌─────────────┐               ┌─────────────┐
+             │    Redis    │               │    MySQL    │
+             │   Shared    │               │ Persistent  │
+             │    State    │               │  Database   │
+             └─────────────┘               └──────┬──────┘
+                                                   ▲
+                                                   │
+                                         Runtime Credential
+                                            Decryption
+                                                   │
+                                    ┌──────────────┴──────────────┐
+                                    │ DB_PASSWORD_ENCRYPTED       │
+                                    │ DB_ENCRYPTION_KEY           │
+                                    └─────────────────────────────┘
