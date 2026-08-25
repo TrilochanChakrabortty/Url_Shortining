@@ -1,23 +1,23 @@
 # services:
 
-#   redis:
-#     image: redis:7-alpine
+#   # ============================================================
+#   # API INSTANCE 1
+#   # ============================================================
 
-#     container_name: url-shortener-redis
-
-#     networks:
-#       - url-shortener-network
-
-
-#   api:
+#   api-1:
 #     build: .
 
 #     restart: unless-stopped
 
 #     environment:
+#       INSTANCE_ID: "api-1"
+
 #       DATABASE_URL: "mysql+pymysql://root:trilochan@host.docker.internal:3306/url_shortener"
-#       REDIS_HOST: redis
-#       REDIS_PORT: 6379
+
+#       REDIS_HOST: "redis"
+#       REDIS_PORT: "6379"
+
+#       SECRET_KEY: "a933KgEsbphwMQrrMZrnHazxCNsfIy86sLlcc6pv93w"
 
 #     expose:
 #       - "8000"
@@ -28,12 +28,54 @@
 #     networks:
 #       - url-shortener-network
 
-#     deploy:
-#       resources:
-#         limits:
-#           cpus: "1.0"
-#           memory: 400M
 
+#   # ============================================================
+#   # API INSTANCE 2
+#   # ============================================================
+
+#   api-2:
+#     build: .
+
+#     restart: unless-stopped
+
+#     environment:
+#       INSTANCE_ID: "api-2"
+
+#       DATABASE_URL: "mysql+pymysql://root:trilochan@host.docker.internal:3306/url_shortener"
+
+#       REDIS_HOST: "redis"
+#       REDIS_PORT: "6379"
+
+#       SECRET_KEY: "a933KgEsbphwMQrrMZrnHazxCNsfIy86sLlcc6pv93w"
+
+#     expose:
+#       - "8000"
+
+#     depends_on:
+#       - redis
+
+#     networks:
+#       - url-shortener-network
+
+
+#   # ============================================================
+#   # REDIS
+#   # ============================================================
+
+#   redis:
+#     image: redis:7-alpine
+
+#     container_name: url-shortener-redis
+
+#     restart: unless-stopped
+
+#     networks:
+#       - url-shortener-network
+
+
+#   # ============================================================
+#   # NGINX LOAD BALANCER
+#   # ============================================================
 
 #   nginx:
 #     image: nginx:alpine
@@ -49,11 +91,16 @@
 #       - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
 #     depends_on:
-#       - api
+#       - api-1
+#       - api-2
 
 #     networks:
 #       - url-shortener-network
 
+
+# # ==============================================================
+# # NETWORK
+# # ==============================================================
 
 # networks:
 
@@ -74,12 +121,29 @@ services:
     environment:
       INSTANCE_ID: "api-1"
 
-      DATABASE_URL: "mysql+pymysql://root:@host.docker.internal:3306/url_shortener"
+      # --------------------------------------------------------
+      # DATABASE
+      # --------------------------------------------------------
 
-      REDIS_HOST: "redis"
-      REDIS_PORT: "6379"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD_ENCRYPTED: "${DB_PASSWORD_ENCRYPTED}"
+      DB_ENCRYPTION_KEY: "${DB_ENCRYPTION_KEY}"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_NAME: "${DB_NAME}"
 
-      SECRET_KEY: ""
+      # --------------------------------------------------------
+      # REDIS
+      # --------------------------------------------------------
+
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT}"
+
+      # --------------------------------------------------------
+      # JWT
+      # --------------------------------------------------------
+
+      SECRET_KEY: "${SECRET_KEY}"
 
     expose:
       - "8000"
@@ -103,12 +167,29 @@ services:
     environment:
       INSTANCE_ID: "api-2"
 
-      DATABASE_URL: "mysql+pymysql://root:@host.docker.internal:3306/url_shortener"
+      # --------------------------------------------------------
+      # DATABASE
+      # --------------------------------------------------------
 
-      REDIS_HOST: "redis"
-      REDIS_PORT: "6379"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD_ENCRYPTED: "${DB_PASSWORD_ENCRYPTED}"
+      DB_ENCRYPTION_KEY: "${DB_ENCRYPTION_KEY}"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_NAME: "${DB_NAME}"
 
-      SECRET_KEY: ""
+      # --------------------------------------------------------
+      # REDIS
+      # --------------------------------------------------------
+
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT}"
+
+      # --------------------------------------------------------
+      # JWT
+      # --------------------------------------------------------
+
+      SECRET_KEY: "${SECRET_KEY}"
 
     expose:
       - "8000"
